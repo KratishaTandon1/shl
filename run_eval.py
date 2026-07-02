@@ -1,4 +1,5 @@
 import os
+os.environ["LOCAL_EVAL_MODE"] = "true"
 import re
 import json
 from fastapi.testclient import TestClient

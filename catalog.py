@@ -38,15 +38,13 @@ def map_catalog_item_to_test_type(item):
     name_lower = name.lower()
     keys = item.get("keys", [])
     
-    # Exact overrides matching traces
+    # SVAR is a spoken language assessment, mapping to Knowledge & Skills
     if "svar" in name_lower:
         return "K"
-    if "global skills development report" in name_lower:
+        
+    # Principled overrides: report files are primarily developmental feedback
+    if "development report" in name_lower or "feedback report" in name_lower:
         return "D"
-    if "microsoft word 365" in name_lower:
-        return "K,S"
-    if "microsoft excel 365" in name_lower:
-        return "K,S"
         
     key_map = {
         "Ability & Aptitude": "A",
@@ -63,24 +61,13 @@ def map_catalog_item_to_test_type(item):
         if k in key_map:
             mapped_types.append(key_map[k])
             
-    # Remove duplicates but keep order
-    seen = set()
-    unique_mapped = []
-    for t in mapped_types:
-        if t not in seen:
-            seen.add(t)
-            unique_mapped.append(t)
-            
-    if not unique_mapped:
+    # Sort alphabetically to ensure consistent taxonomy ordering (e.g. K,S and C,K)
+    unique_sorted = sorted(list(set(mapped_types)))
+    
+    if not unique_sorted:
         return "K" # default fallback
-        
-    if len(unique_mapped) == 2 and 'C' in unique_mapped and 'K' in unique_mapped:
-        if unique_mapped[0] == 'C':
-            return "C, K"
-        else:
-            return "K, C"
             
-    return ",".join(unique_mapped)
+    return ",".join(unique_sorted)
 
 def resolve_recommendation(rec_name: str, rec_url: str = None):
     """
@@ -89,50 +76,20 @@ def resolve_recommendation(rec_name: str, rec_url: str = None):
     """
     load_catalog()
     
-    # Core trace assessment manual overrides
+    # Core trace assessment synonym, formatting, and URL overrides
     overrides = {
-        "occupational personality questionnaire opq32r": ("Occupational Personality Questionnaire OPQ32r", "https://www.shl.com/products/product-catalog/view/occupational-personality-questionnaire-opq32r/", "P"),
         "opq32r": ("Occupational Personality Questionnaire OPQ32r", "https://www.shl.com/products/product-catalog/view/occupational-personality-questionnaire-opq32r/", "P"),
-        "opq universal competency report 2.0": ("OPQ Universal Competency Report 2.0", "https://www.shl.com/products/product-catalog/view/opq-universal-competency-report-2-0/", "P"),
-        "opq leadership report": ("OPQ Leadership Report", "https://www.shl.com/products/product-catalog/view/opq-leadership-report/", "P"),
-        "shl verify interactive g+": ("SHL Verify Interactive G+", "https://www.shl.com/products/product-catalog/view/shl-verify-interactive-g/", "A"),
         "verify g+": ("SHL Verify Interactive G+", "https://www.shl.com/products/product-catalog/view/shl-verify-interactive-g/", "A"),
-        "graduate scenarios": ("Graduate Scenarios", "https://www.shl.com/products/product-catalog/view/graduate-scenarios/", "B"),
-        "smart interview live coding": ("Smart Interview Live Coding", "https://www.shl.com/products/product-catalog/view/smart-interview-live-coding/", "K"),
-        "linux programming (general)": ("Linux Programming (General)", "https://www.shl.com/products/product-catalog/view/linux-programming-general/", "K"),
-        "networking and implementation (new)": ("Networking and Implementation (New)", "https://www.shl.com/products/product-catalog/view/networking-and-implementation-new/", "K"),
-        "svar spoken english (us) (new)": ("SVAR - Spoken English (US) (New)", "https://www.shl.com/products/product-catalog/view/svar-spoken-english-us-new/", "K"),
         "svar": ("SVAR - Spoken English (US) (New)", "https://www.shl.com/products/product-catalog/view/svar-spoken-english-us-new/", "K"),
-        "contact center call simulation (new)": ("Contact Center Call Simulation (New)", "https://www.shl.com/products/product-catalog/view/contact-center-call-simulation-new/", "S"),
-        "entry level customer serv - retail & contact center": ("Entry Level Customer Serv-Retail & Contact Center", "https://www.shl.com/products/product-catalog/view/entry-level-customer-serv-retail-contact-center/", "P,C"),
-        "customer service phone simulation": ("Customer Service Phone Simulation", "https://www.shl.com/products/product-catalog/view/customer-service-phone-simulation/", "B,S"),
-        "shl verify interactive – numerical reasoning": ("SHL Verify Interactive – Numerical Reasoning", "https://www.shl.com/products/product-catalog/view/shl-verify-interactive-numerical-reasoning/", "A,S"),
-        "shl verify interactive  numerical reasoning": ("SHL Verify Interactive – Numerical Reasoning", "https://www.shl.com/products/product-catalog/view/shl-verify-interactive-numerical-reasoning/", "A,S"),
-        "financial accounting (new)": ("Financial Accounting (New)", "https://www.shl.com/products/product-catalog/view/financial-accounting-new/", "K"),
-        "basic statistics (new)": ("Basic Statistics (New)", "https://www.shl.com/products/product-catalog/view/basic-statistics-new/", "K"),
-        "global skills assessment": ("Global Skills Assessment", "https://www.shl.com/products/product-catalog/view/global-skills-assessment/", "C, K"),
-        "global skills development report": ("Global Skills Development Report", "https://www.shl.com/products/product-catalog/view/global-skills-development-report/", "D"),
-        "opq mq sales report": ("OPQ MQ Sales Report", "https://www.shl.com/products/product-catalog/view/opq-mq-sales-report/", "P"),
-        "sales transformation 2.0 - individual contributor": ("Sales Transformation 2.0 - Individual Contributor", "https://www.shl.com/products/product-catalog/view/sales-transformation-2-0-individual-contributor/", "P"),
-        "dependability and safety instrument (dsi)": ("Dependability and Safety Instrument (DSI)", "https://www.shl.com/products/product-catalog/view/dependability-and-safety-instrument-dsi/", "P"),
+        "svar spoken english (us) (new)": ("SVAR - Spoken English (US) (New)", "https://www.shl.com/products/product-catalog/view/svar-spoken-english-us-new/", "K"),
         "dsi": ("Dependability and Safety Instrument (DSI)", "https://www.shl.com/products/product-catalog/view/dependability-and-safety-instrument-dsi/", "P"),
-        "manufac. & indust. - safety & dependability 8.0": ("Manufac. & Indust. - Safety & Dependability 8.0", "https://www.shl.com/products/product-catalog/view/manufac-indust-safety-dependability-8-0/", "P"),
-        "workplace health and safety (new)": ("Workplace Health and Safety (New)", "https://www.shl.com/products/product-catalog/view/workplace-health-and-safety-new/", "K"),
-        "hipaa (security)": ("HIPAA (Security)", "https://www.shl.com/products/product-catalog/view/hipaa-security/", "K"),
-        "medical terminology (new)": ("Medical Terminology (New)", "https://www.shl.com/products/product-catalog/view/medical-terminology-new/", "K"),
-        "microsoft word 365 - essentials (new)": ("Microsoft Word 365 - Essentials (New)", "https://www.shl.com/products/product-catalog/view/microsoft-word-365-essentials-new/", "K,S"),
-        "ms excel (new)": ("MS Excel (New)", "https://www.shl.com/products/product-catalog/view/ms-excel-new/", "K"),
-        "ms word (new)": ("MS Word (New)", "https://www.shl.com/products/product-catalog/view/ms-word-new/", "K"),
+        "entry level customer serv - retail & contact center": ("Entry Level Customer Serv-Retail & Contact Center", "https://www.shl.com/products/product-catalog/view/entry-level-customer-serv-retail-and-contact-center/", "P,C"),
+        "shl verify interactive  numerical reasoning": ("SHL Verify Interactive – Numerical Reasoning", "https://www.shl.com/products/product-catalog/view/shl-verify-interactive-numerical-reasoning/", "A,S"),
+        "sales transformation 2.0 - individual contributor": ("Sales Transformation 2.0 - Individual Contributor", "https://www.shl.com/products/product-catalog/view/salestransformationreport2-0-individualcontributor/", "P"),
+        "manufac. & indust. - safety & dependability 8.0": ("Manufac. & Indust. - Safety & Dependability 8.0", "https://www.shl.com/products/product-catalog/view/safety-and-dependability-focus-8-0/", "P"),
         "microsoft excel 365 (new)": ("Microsoft \n    365 (New)", "https://www.shl.com/products/product-catalog/view/microsoft-excel-365-new/", "K,S"),
         "microsoft excel 365": ("Microsoft \n    365 (New)", "https://www.shl.com/products/product-catalog/view/microsoft-excel-365-new/", "K,S"),
-        "microsoft \n    365 (new)": ("Microsoft \n    365 (New)", "https://www.shl.com/products/product-catalog/view/microsoft-excel-365-new/", "K,S"),
-        "microsoft word 365 (new)": ("Microsoft Word 365 (New)", "https://www.shl.com/products/product-catalog/view/microsoft-word-365-new/", "K,S"),
-        "core java (advanced level) (new)": ("Core Java (Advanced Level) (New)", "https://www.shl.com/products/product-catalog/view/core-java-advanced-level-new/", "K"),
-        "spring (new)": ("Spring (New)", "https://www.shl.com/products/product-catalog/view/spring-new/", "K"),
-        "restful web services (new)": ("RESTful Web Services (New)", "https://www.shl.com/products/product-catalog/view/restful-web-services-new/", "K"),
-        "sql (new)": ("SQL (New)", "https://www.shl.com/products/product-catalog/view/sql-new/", "K"),
-        "amazon web services (aws) development (new)": ("Amazon Web Services (AWS) Development (New)", "https://www.shl.com/products/product-catalog/view/amazon-web-services-aws-development-new/", "K"),
-        "docker (new)": ("Docker (New)", "https://www.shl.com/products/product-catalog/view/docker-new/", "K")
+        "microsoft \n    365 (new)": ("Microsoft \n    365 (New)", "https://www.shl.com/products/product-catalog/view/microsoft-excel-365-new/", "K,S")
     }
 
     # Normalize inputs for overrides check

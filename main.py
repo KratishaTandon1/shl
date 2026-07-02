@@ -69,21 +69,25 @@ def chat(request: ChatRequest):
                 ))
     
     # Safety Check: Limit recommendations size between 1 and 10 items
-    # If the list is empty, we must return empty recommendations (e.g. during refusal or clarifying)
     if len(resolved_recs) > 10:
         resolved_recs = resolved_recs[:10]
         
-    # Safety Check: Enforce the 8-turn conversation cap
-    # The cap is 8 user + assistant turns total (8 roundtrips).
-    # If user messages length in history is >= 8, force end_of_conversation to True.
-    user_turns = len([m for m in request.messages if m.role == "user"])
-    
+    reply = agent_res.reply
     end_of_conv = agent_res.end_of_conversation
+    
+    # Zero-item resolution guard:
+    # If the agent confidently proposed recommendations but NONE of them resolved to the catalog
+    if agent_res.recommendations and not resolved_recs:
+        reply = "I selected some assessments, but they could not be matched to our active catalog. Could you please clarify if you need cognitive tests, personality questionnaires, or specific programming screens?"
+        end_of_conv = False
+        
+    # Safety Check: Enforce the 8-turn conversation cap
+    user_turns = len([m for m in request.messages if m.role == "user"])
     if user_turns >= 8:
         end_of_conv = True
         
     return ChatResponse(
-        reply=agent_res.reply,
+        reply=reply,
         recommendations=resolved_recs,
         end_of_conversation=end_of_conv
     )

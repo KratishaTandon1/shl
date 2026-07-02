@@ -52,7 +52,6 @@ download_catalog.py
 extracted_recommendations.json
 find_api_keys.py
 fix_catalog_json.py
-generate_cache_from_traces.py
 list_models.py
 map_categories_to_letters.py
 print_traces_summary.py
@@ -65,8 +64,6 @@ test_api.py
 test_core_matching.py
 test_mapping.py
 test_rate_limits.py
-test_resolution.py
-verify_retrieval.py
 verify_retrieval_2.py
 api_cache_temp.json
 

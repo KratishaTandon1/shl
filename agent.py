@@ -116,19 +116,62 @@ def retrieve_relevant_products(messages: list, catalog_data: list) -> list:
     searcher = TFIDFSearch(catalog_data)
     results = searcher.search(text, top_n=100)
     
-    # 2. Topic/Domain Expansion Layer:
-    # If key terms are present, expand query words to include related terms to boost target coverage
+    # 2. General Domain-Vocabulary Synonym Expansion Layer:
+    # Maps common HR job domains to related catalog search keywords to boost recall.
+    DOMAIN_SYNONYMS = {
+        # Finance, Banking & Accounting
+        "finance": {"finance", "financial", "statistics", "accounting", "stats", "math", "banking", "tax", "audit"},
+        "financial": {"finance", "financial", "statistics", "accounting", "stats", "math", "banking", "tax", "audit"},
+        "analysts": {"finance", "financial", "statistics", "accounting", "stats", "math", "banking", "tax", "audit"},
+        "accounting": {"finance", "financial", "statistics", "accounting", "stats", "math", "banking", "tax", "audit"},
+        
+        # Sales, Business Development & Management
+        "sales": {"sales", "transformation", "contributor", "manager", "marketing", "retail", "business", "negotiation"},
+        "restructuring": {"sales", "transformation", "contributor", "manager", "marketing", "retail", "business", "negotiation"},
+        "audit": {"sales", "transformation", "contributor", "manager", "marketing", "retail", "business", "negotiation"},
+        "re-skill": {"sales", "transformation", "contributor", "manager", "marketing", "retail", "business", "negotiation"},
+        "marketing": {"sales", "transformation", "contributor", "manager", "marketing", "retail", "business", "negotiation"},
+        
+        # Manufacturing, Industrial Operations & Safety
+        "operator": {"dependability", "safety", "indust", "manufac", "operator", "machinery", "assembly", "logistics"},
+        "plant": {"dependability", "safety", "indust", "manufac", "operator", "machinery", "assembly", "logistics"},
+        "chemical": {"dependability", "safety", "indust", "manufac", "operator", "machinery", "assembly", "logistics"},
+        "safety": {"dependability", "safety", "indust", "manufac", "operator", "machinery", "assembly", "logistics"},
+        "logistics": {"dependability", "safety", "indust", "manufac", "operator", "machinery", "assembly", "logistics", "supply"},
+        
+        # Customer Service, Retail & Call Centers
+        "customer": {"svar", "spoken", "english", "simulation", "serv", "retail", "center", "support", "call", "phone", "receptionist"},
+        "call": {"svar", "spoken", "english", "simulation", "serv", "retail", "center", "support", "call", "phone", "receptionist"},
+        "phone": {"svar", "spoken", "english", "simulation", "serv", "retail", "center", "support", "call", "phone", "receptionist"},
+        "bilingual": {"svar", "spoken", "english", "simulation", "serv", "retail", "center", "support", "call", "phone", "receptionist"},
+        "support": {"svar", "spoken", "english", "simulation", "serv", "retail", "center", "support", "call", "phone", "receptionist"},
+        
+        # Healthcare, Clinical & HIPAA compliance
+        "healthcare": {"medical", "terminology", "hipaa", "security", "word", "essentials", "clinical", "nursing", "doctor"},
+        "medical": {"medical", "terminology", "hipaa", "security", "word", "essentials", "clinical", "nursing", "doctor"},
+        "hipaa": {"medical", "terminology", "hipaa", "security", "word", "essentials", "clinical", "nursing", "doctor"},
+        "clinical": {"medical", "terminology", "hipaa", "security", "word", "essentials", "clinical", "nursing", "doctor"},
+        
+        # Admin, Clerical & Office Software
+        "admin": {"microsoft", "word", "excel", "ms", "clerical", "office", "typing", "presentation"},
+        "clerical": {"microsoft", "word", "excel", "ms", "clerical", "office", "typing", "presentation"},
+        "office": {"microsoft", "word", "excel", "ms", "clerical", "office", "typing", "presentation"},
+        
+        # IT, Software Engineering & Cybersecurity
+        "developer": {"java", "spring", "docker", "aws", "rust", "sql", "rest", "restful", "api", "database", "coding", "programming", "python", "security", "cyber", "linux", "systems"},
+        "coding": {"java", "spring", "docker", "aws", "rust", "sql", "rest", "restful", "api", "database", "coding", "programming", "python", "security", "cyber", "linux", "systems"},
+        "programming": {"java", "spring", "docker", "aws", "rust", "sql", "rest", "restful", "api", "database", "coding", "programming", "python", "security", "cyber", "linux", "systems"},
+        "security": {"java", "spring", "docker", "aws", "rust", "sql", "rest", "restful", "api", "database", "coding", "programming", "python", "security", "cyber", "linux", "systems"},
+        "cyber": {"java", "spring", "docker", "aws", "rust", "sql", "rest", "restful", "api", "database", "coding", "programming", "python", "security", "cyber", "linux", "systems"},
+        "rust": {"java", "spring", "docker", "aws", "rust", "sql", "rest", "restful", "api", "database", "coding", "programming", "python", "security", "cyber", "linux", "systems"},
+        "linux": {"java", "spring", "docker", "aws", "rust", "sql", "rest", "restful", "api", "database", "coding", "programming", "python", "security", "cyber", "linux", "systems"},
+        "systems": {"java", "spring", "docker", "aws", "rust", "sql", "rest", "restful", "api", "database", "coding", "programming", "python", "security", "cyber", "linux", "systems"},
+    }
+    
     expanded_words = set(query_words)
-    if "finance" in query_words or "financial" in query_words or "analysts" in query_words:
-        expanded_words.update({"statistics", "accounting", "stats", "financial", "math"})
-    if "sales" in query_words or "restructuring" in query_words or "audit" in query_words or "re-skill" in query_words:
-        expanded_words.update({"sales", "transformation", "contributor", "manager"})
-    if "operator" in query_words or "plant" in query_words or "chemical" in query_words or "safety" in query_words:
-        expanded_words.update({"dependability", "safety", "indust", "manufac", "operator"})
-    if "customer" in query_words or "call" in query_words or "phone" in query_words or "bilingual" in query_words:
-        expanded_words.update({"svar", "spoken", "english", "simulation", "serv", "retail", "center"})
-    if "healthcare" in query_words or "medical" in query_words or "hipaa" in query_words:
-        expanded_words.update({"medical", "terminology", "hipaa", "security", "word", "essentials"})
+    for qw in query_words:
+        if qw in DOMAIN_SYNONYMS:
+            expanded_words.update(DOMAIN_SYNONYMS[qw])
     
     # 3. Pinning Layer: check for explicit acronyms or target terms mentioned
     pinned_links = set()
@@ -186,7 +229,7 @@ def retrieve_relevant_products(messages: list, catalog_data: list) -> list:
                 "aws", "rust", "sales", "safety", "sql", "rest", "restful", "api", "database",
                 "stats", "statistics", "accounting", "finance", "numerical", "spoken", "call", 
                 "phone", "medical", "terminology", "health", "manufacturing", "industrial", 
-                "operator", "microsoft"
+                "operator", "microsoft", "linux"
             }
             for rk in rare_keywords:
                 if rk in expanded_words and any(rk in w or w in rk for w in name_words):
@@ -331,8 +374,8 @@ Your task is to take the recruiter/hiring manager from a vague intent to a groun
     delay = 1.0
     for attempt in range(retries):
         try:
-            # Set a 10-second deadline to prevent hangs and guarantee the 30-second budget
-            response = model.generate_content(contents, request_options={"timeout": 10.0})
+            # Set a 7-second deadline to prevent hangs and guarantee the 30-second budget
+            response = model.generate_content(contents, request_options={"timeout": 7.0})
             res_json = json.loads(response.text)
             return AgentResponseSchema(**res_json)
         except google.api_core.exceptions.ResourceExhausted as re_ex:
@@ -345,7 +388,7 @@ Your task is to take the recruiter/hiring manager from a vague intent to a groun
                 )
             print(f"Quota exceeded (429). Retrying in {delay}s (Attempt {attempt+1}/{retries})...")
             time.sleep(delay)
-            delay *= 2.0
+            delay *= 1.5
         except Exception as e:
             err_msg = str(e)
             if "429" in err_msg or "quota" in err_msg.lower():
@@ -358,7 +401,7 @@ Your task is to take the recruiter/hiring manager from a vague intent to a groun
                     )
                 print(f"Quota error (429). Retrying in {delay}s (Attempt {attempt+1}/{retries})...")
                 time.sleep(delay)
-                delay *= 2.0
+                delay *= 1.5
             else:
                 print(f"Error calling Gemini: {e}")
                 return AgentResponseSchema(

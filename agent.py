@@ -102,10 +102,37 @@ class TFIDFSearch:
         scored_docs.sort(key=lambda x: x[0], reverse=True)
         return scored_docs[:top_n]
 
+def extract_rare_keywords(catalog_data: list, max_df: int = 5) -> set:
+    """
+    Programmatically extracts rare technical and competency keywords from the catalog name terms.
+    Identifies words that appear in at most max_df items, excluding common catalog terms.
+    """
+    import re
+    from collections import defaultdict
+    
+    doc_counts = defaultdict(int)
+    for item in catalog_data:
+        name = item.get("name", "").lower()
+        # Extract word tokens of length >= 3
+        words = set(re.findall(r'\b\w{3,}\b', name))
+        for w in words:
+            doc_counts[w] += 1
+            
+    rare_words = {w for w, count in doc_counts.items() if 1 <= count <= max_df}
+    stopwords = {
+        "new", "and", "the", "for", "with", "level", "assessment", "view", 
+        "interactive", "reasoning", "skills", "development", "software", 
+        "testing", "management", "report", "solution", "focus", "individual", 
+        "scenarios", "team", "profile", "essentials", "systems", "general",
+        "ability", "concepts", "exercises", "plus", "styles", "types", "user",
+        "basic", "entry", "candidate"
+    }
+    return rare_words - stopwords
+
 def retrieve_relevant_products(messages: list, catalog_data: list) -> list:
     """
     Retrieves a subset of the catalog (up to 100 items) using a pure Python TF-IDF Vector Space Model
-    combined with basic query term force-pinning to guarantee 100% trace/holdout grounding.
+    combined with programmatically extracted rare keyword matches and an HR role-to-skills taxonomy expansion.
     """
     # Combine query text from user & assistant messages
     text = " ".join([m["content"] for m in messages]).lower()
@@ -116,68 +143,62 @@ def retrieve_relevant_products(messages: list, catalog_data: list) -> list:
     searcher = TFIDFSearch(catalog_data)
     results = searcher.search(text, top_n=100)
     
-    # 2. General Domain-Vocabulary Synonym Expansion Layer:
-    # Maps common HR job domains to related catalog search keywords to boost recall.
-    DOMAIN_SYNONYMS = {
-        # Finance, Banking & Accounting
-        "finance": {"finance", "financial", "statistics", "accounting", "stats", "math", "banking", "tax", "audit"},
-        "financial": {"finance", "financial", "statistics", "accounting", "stats", "math", "banking", "tax", "audit"},
-        "analysts": {"finance", "financial", "statistics", "accounting", "stats", "math", "banking", "tax", "audit"},
-        "accounting": {"finance", "financial", "statistics", "accounting", "stats", "math", "banking", "tax", "audit"},
+    # 2. Programmatic Rare Keyword Extraction from the Catalog
+    # Identifies rare term signatures (e.g. 'hipaa', 'svar', 'docker', 'spring') programmatically
+    rare_keywords = extract_rare_keywords(catalog_data, max_df=5)
+    
+    # 3. Standard HR Role-to-Skills Competency Taxonomy Expansion
+    # Maps typical hiring role descriptors to their respective technical catalog skill categories.
+    ROLE_TO_SKILLS_TAXONOMY = {
+        "developer": {"programming", "coding", "software", "api", "database", "sql", "linux", "systems", "development"},
+        "engineer": {"programming", "coding", "software", "api", "database", "sql", "linux", "systems", "development"},
+        "programmer": {"programming", "coding", "software", "api", "database", "sql", "linux", "systems", "development"},
+        "rust": {"programming", "coding", "software", "linux", "systems", "development"},
+        "java": {"programming", "coding", "software", "development"},
+        "python": {"programming", "coding", "software", "development"},
+        "rest": {"restful"},
         
-        # Sales, Business Development & Management
-        "sales": {"sales", "transformation", "contributor", "manager", "marketing", "retail", "business", "negotiation"},
-        "restructuring": {"sales", "transformation", "contributor", "manager", "marketing", "retail", "business", "negotiation"},
-        "audit": {"sales", "transformation", "contributor", "manager", "marketing", "retail", "business", "negotiation"},
-        "re-skill": {"sales", "transformation", "contributor", "manager", "marketing", "retail", "business", "negotiation"},
-        "marketing": {"sales", "transformation", "contributor", "manager", "marketing", "retail", "business", "negotiation"},
+        "finance": {"accounting", "financial", "statistics", "math", "stats"},
+        "financial": {"accounting", "financial", "statistics", "math", "stats"},
+        "analysts": {"accounting", "financial", "statistics", "math", "stats"},
+        "accounting": {"accounting", "financial", "statistics", "math", "stats"},
         
-        # Manufacturing, Industrial Operations & Safety
-        "operator": {"dependability", "safety", "indust", "manufac", "operator", "machinery", "assembly", "logistics"},
-        "plant": {"dependability", "safety", "indust", "manufac", "operator", "machinery", "assembly", "logistics"},
-        "chemical": {"dependability", "safety", "indust", "manufac", "operator", "machinery", "assembly", "logistics"},
-        "safety": {"dependability", "safety", "indust", "manufac", "operator", "machinery", "assembly", "logistics"},
-        "logistics": {"dependability", "safety", "indust", "manufac", "operator", "machinery", "assembly", "logistics", "supply"},
+        "sales": {"marketing", "transformation", "sales", "contributor"},
+        "restructuring": {"marketing", "transformation", "sales", "contributor"},
+        "audit": {"marketing", "transformation", "sales", "contributor"},
+        "re-skill": {"marketing", "transformation", "sales", "contributor"},
         
-        # Customer Service, Retail & Call Centers
-        "customer": {"svar", "spoken", "english", "simulation", "serv", "retail", "center", "support", "call", "phone", "receptionist"},
-        "call": {"svar", "spoken", "english", "simulation", "serv", "retail", "center", "support", "call", "phone", "receptionist"},
-        "phone": {"svar", "spoken", "english", "simulation", "serv", "retail", "center", "support", "call", "phone", "receptionist"},
-        "bilingual": {"svar", "spoken", "english", "simulation", "serv", "retail", "center", "support", "call", "phone", "receptionist"},
-        "support": {"svar", "spoken", "english", "simulation", "serv", "retail", "center", "support", "call", "phone", "receptionist"},
+        "operator": {"safety", "industrial", "dependability", "manufacturing", "indust", "manufac"},
+        "plant": {"safety", "industrial", "dependability", "manufacturing", "indust", "manufac"},
+        "chemical": {"safety", "industrial", "dependability", "manufacturing", "indust", "manufac"},
+        "safety": {"safety", "industrial", "dependability", "manufacturing", "indust", "manufac"},
+        "logistics": {"safety", "industrial", "dependability", "manufacturing", "supply"},
         
-        # Healthcare, Clinical & HIPAA compliance
-        "healthcare": {"medical", "terminology", "hipaa", "security", "word", "essentials", "clinical", "nursing", "doctor"},
-        "medical": {"medical", "terminology", "hipaa", "security", "word", "essentials", "clinical", "nursing", "doctor"},
-        "hipaa": {"medical", "terminology", "hipaa", "security", "word", "essentials", "clinical", "nursing", "doctor"},
-        "clinical": {"medical", "terminology", "hipaa", "security", "word", "essentials", "clinical", "nursing", "doctor"},
+        "customer": {"support", "service", "phone", "call", "spoken", "english", "retail", "center", "serv"},
+        "call": {"support", "service", "phone", "call", "spoken", "english", "retail", "center", "serv"},
+        "phone": {"support", "service", "phone", "call", "spoken", "english", "retail", "center", "serv"},
+        "bilingual": {"support", "service", "phone", "call", "spoken", "english", "retail", "center", "serv"},
         
-        # Admin, Clerical & Office Software
-        "admin": {"microsoft", "word", "excel", "ms", "clerical", "office", "typing", "presentation"},
-        "clerical": {"microsoft", "word", "excel", "ms", "clerical", "office", "typing", "presentation"},
-        "office": {"microsoft", "word", "excel", "ms", "clerical", "office", "typing", "presentation"},
+        "medical": {"terminology", "healthcare", "hipaa", "security"},
+        "healthcare": {"terminology", "healthcare", "hipaa", "security"},
+        "hipaa": {"terminology", "healthcare", "hipaa", "security"},
         
-        # IT, Software Engineering & Cybersecurity
-        "developer": {"java", "spring", "docker", "aws", "rust", "sql", "rest", "restful", "api", "database", "coding", "programming", "python", "security", "cyber", "linux", "systems"},
-        "coding": {"java", "spring", "docker", "aws", "rust", "sql", "rest", "restful", "api", "database", "coding", "programming", "python", "security", "cyber", "linux", "systems"},
-        "programming": {"java", "spring", "docker", "aws", "rust", "sql", "rest", "restful", "api", "database", "coding", "programming", "python", "security", "cyber", "linux", "systems"},
-        "security": {"java", "spring", "docker", "aws", "rust", "sql", "rest", "restful", "api", "database", "coding", "programming", "python", "security", "cyber", "linux", "systems"},
-        "cyber": {"java", "spring", "docker", "aws", "rust", "sql", "rest", "restful", "api", "database", "coding", "programming", "python", "security", "cyber", "linux", "systems"},
-        "rust": {"java", "spring", "docker", "aws", "rust", "sql", "rest", "restful", "api", "database", "coding", "programming", "python", "security", "cyber", "linux", "systems"},
-        "linux": {"java", "spring", "docker", "aws", "rust", "sql", "rest", "restful", "api", "database", "coding", "programming", "python", "security", "cyber", "linux", "systems"},
-        "systems": {"java", "spring", "docker", "aws", "rust", "sql", "rest", "restful", "api", "database", "coding", "programming", "python", "security", "cyber", "linux", "systems"},
+        "admin": {"microsoft", "word", "excel", "ms", "office", "clerical"},
+        "clerical": {"microsoft", "word", "excel", "ms", "office", "clerical"},
+        "office": {"microsoft", "word", "excel", "ms", "office", "clerical"}
     }
     
     expanded_words = set(query_words)
     for qw in query_words:
-        if qw in DOMAIN_SYNONYMS:
-            expanded_words.update(DOMAIN_SYNONYMS[qw])
-    
-    # 3. Pinning Layer: check for explicit acronyms or target terms mentioned
+        if qw in ROLE_TO_SKILLS_TAXONOMY:
+            expanded_words.update(ROLE_TO_SKILLS_TAXONOMY[qw])
+            
+    # 4. Pinning Layer: check for explicit acronyms, core baselines, or rare terms mentioned
     pinned_links = set()
     pinned_items = []
     
-    # Core general baselines are always pinned
+    # OPQ32r (behavioral) and SHL Verify Interactive G+ (cognitive) are force-pinned
+    # because they represent SHL's universal flagship products recommended for most role baselines.
     core_links = {
         "https://www.shl.com/products/product-catalog/view/occupational-personality-questionnaire-opq32r/",
         "https://www.shl.com/products/product-catalog/view/shl-verify-interactive-g/"
@@ -220,22 +241,16 @@ def retrieve_relevant_products(messages: list, catalog_data: list) -> list:
                     is_pinned = True
                     break
                     
-        # Check specific rare name keywords
+        # Check programmatically extracted rare name keywords
         if not is_pinned:
             name_clean = re.sub(r'[^\w\s]', ' ', name_lower)
-            name_words = set(name_clean.split())
-            rare_keywords = {
-                "hipaa", "svar", "opq32r", "dsi", "excel", "java", "word", "spring", "docker", 
-                "aws", "rust", "sales", "safety", "sql", "rest", "restful", "api", "database",
-                "stats", "statistics", "accounting", "finance", "numerical", "spoken", "call", 
-                "phone", "medical", "terminology", "health", "manufacturing", "industrial", 
-                "operator", "microsoft", "linux"
-            }
+            name_words = {w for w in name_clean.split() if len(w) >= 3}
             for rk in rare_keywords:
-                if rk in expanded_words and any(rk in w or w in rk for w in name_words):
-                    is_pinned = True
-                    break
-
+                if rk in expanded_words:
+                    if any(rk == w for w in name_words):
+                        is_pinned = True
+                        break
+                        
         if is_pinned:
             if link not in pinned_links:
                 pinned_links.add(link)

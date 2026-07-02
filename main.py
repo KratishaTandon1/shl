@@ -1,7 +1,7 @@
 import os
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-from typing import List
+from typing import List, Literal
 import catalog
 import agent
 
@@ -12,7 +12,7 @@ load_dotenv()
 app = FastAPI(title="SHL Assessment Recommender API")
 
 class ChatMessage(BaseModel):
-    role: str
+    role: Literal["user", "assistant"]
     content: str
 
 class ChatRequest(BaseModel):
@@ -80,10 +80,14 @@ def chat(request: ChatRequest):
     if agent_res.recommendations and not resolved_recs:
         reply = "I selected some assessments, but they could not be matched to our active catalog. Could you please clarify if you need cognitive tests, personality questionnaires, or specific programming screens?"
         end_of_conv = False
+
+    # Guard: never lock in end_of_conversation if no recommendations were ever delivered
+    if end_of_conv and not resolved_recs:
+        end_of_conv = False
         
-    # Safety Check: Enforce the 8-turn conversation cap
-    user_turns = len([m for m in request.messages if m.role == "user"])
-    if user_turns >= 8:
+    # Safety Check: Enforce the 8-turn conversation cap (counts ALL turns: user + assistant)
+    total_turns = len(request.messages)
+    if total_turns >= 8:
         end_of_conv = True
         
     return ChatResponse(

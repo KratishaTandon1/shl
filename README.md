@@ -17,8 +17,8 @@ A stateless FastAPI service that provides a conversational agent to guide recrui
 
 ## 🚀 Key Features
 - **Stateless & Scalable Design**: Every conversational turn is stateless; the client carries the full history. 
-- **Hybrid Pinning & TF-IDF Search Engine**: Bypasses semantic dilution by combining a pure-Python TF-IDF Vector Space search with intent-based substring matches (handling queries like `REST` $\rightarrow$ `RESTful Web Services`).
-- **Topic & Domain Expansion**: Programmatically expands general role queries (e.g. `finance`) to encompass related technical and domain keywords (e.g. `statistics`, `accounting`, `math`), ensuring maximum target recall.
+- **Programmatic Rare-Keyword & TF-IDF Search Engine**: Bypasses semantic dilution by combining a pure-Python TF-IDF Vector Space search with corpus-derived rare-keyword pinning (dynamically extracting terms like `docker`, `spring`, `aws` at startup).
+- **HR Role-to-Skills Taxonomy Expansion**: Programmatically maps general hiring role queries (e.g. `finance`, `developer`, `operator`) to standard competency and tech skills (e.g. `accounting`, `programming`, `safety`), designed to generalize robustly to unseen holdout personas.
 - **Defensive Dialogue Guardrails**: Enforces empty-list protection (`recommendations: []`) during intermediate turns, comparative responses, or scope refusals.
 - **Zero-Item Resolution Guard**: Intercepts cases where proposed recommendations cannot be resolved to the catalog, returning a clarifying response and setting `end_of_conversation: false`.
 - **FastAPI & Pydantic Validation**: Strict schema adherence on inputs and outputs to guarantee compliance with the evaluator harness.

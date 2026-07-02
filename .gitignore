@@ -1,0 +1,72 @@
+# Environments
+.env
+
+# Python caching
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Distribution / packaging
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+
+# Editor/OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Diagnostic, test, and utility scripts
+parse_traces.py
+analyze_catalog.py
+search_catalog.py
+list_recs.py
+check_packages.py
+check_api_keys.py
+check_json.py
+check_svar.py
+compress_catalog.py
+debug_c9_scores.py
+debug_history.py
+download_catalog.py
+extracted_recommendations.json
+find_api_keys.py
+fix_catalog_json.py
+generate_cache_from_traces.py
+list_models.py
+map_categories_to_letters.py
+print_traces_summary.py
+print_traces_summary_first.py
+print_traces_summary_second.py
+search_365.py
+search_excel.py
+search_verify.py
+test_api.py
+test_core_matching.py
+test_mapping.py
+test_rate_limits.py
+test_resolution.py
+verify_retrieval.py
+verify_retrieval_2.py
+api_cache_temp.json
+

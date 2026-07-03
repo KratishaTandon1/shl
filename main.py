@@ -87,7 +87,7 @@ def chat(request: ChatRequest):
         
     # Safety Check: Enforce the 8-turn conversation cap (counts ALL turns: user + assistant)
     total_turns = len(request.messages)
-    if total_turns >= 8:
+    if total_turns >= 16:
         end_of_conv = True
         
     return ChatResponse(

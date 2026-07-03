@@ -6,6 +6,7 @@ import google.generativeai as genai
 import google.api_core.exceptions
 from pydantic import BaseModel, Field
 from typing import List
+from collections import defaultdict
 
 class RecommendationInput(BaseModel):
     name: str = Field(description="Exact or close name of the assessment from the catalog, e.g. 'Occupational Personality Questionnaire OPQ32r'")
@@ -107,9 +108,6 @@ def extract_rare_keywords(catalog_data: list, max_df: int = 5) -> set:
     Programmatically extracts rare technical and competency keywords from the catalog name terms.
     Identifies words that appear in at most max_df items, excluding common catalog terms.
     """
-    import re
-    from collections import defaultdict
-    
     doc_counts = defaultdict(int)
     for item in catalog_data:
         name = item.get("name", "").lower()
@@ -129,26 +127,47 @@ def extract_rare_keywords(catalog_data: list, max_df: int = 5) -> set:
     }
     return rare_words - stopwords
 
-def retrieve_relevant_products(messages: list, catalog_data: list) -> list:
+# ---------------------------------------------------------------------------
+# MODULE-LEVEL STARTUP: load catalog + build TF-IDF index and rare-keyword
+# set ONCE when the process starts, instead of on every /chat request.
+# Rebuilding these per-request wasted CPU on every turn and risked eating
+# into the 30s per-call budget under a cold/throttled instance.
+# ---------------------------------------------------------------------------
+def _load_catalog_data() -> list:
+    catalog_path = os.path.join(os.path.dirname(__file__), "compressed_catalog.json")
+    if not os.path.exists(catalog_path):
+        catalog_path = "compressed_catalog.json"
+    try:
+        with open(catalog_path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception as e:
+        print(f"Error loading compressed catalog in agent.py: {e}")
+        return []
+
+CATALOG_DATA = _load_catalog_data()
+TFIDF_SEARCHER = TFIDFSearch(CATALOG_DATA)
+RARE_KEYWORDS = extract_rare_keywords(CATALOG_DATA, max_df=5)
+
+
+def retrieve_relevant_products(messages: list) -> list:
     """
     Retrieves a subset of the catalog (up to 100 items) using a pure Python TF-IDF Vector Space Model
     combined with programmatically extracted rare keyword matches and an HR role-to-skills taxonomy expansion.
+    Uses the module-level pre-built TFIDF_SEARCHER, CATALOG_DATA, and RARE_KEYWORDS
+    so nothing is rebuilt on a per-request basis.
     """
     # Combine query text from user & assistant messages
     text = " ".join([m["content"] for m in messages]).lower()
     text_clean = re.sub(r'[^\w\s]', ' ', text)
     query_words = set(text_clean.split())
     
-    # 1. Run TF-IDF Vector Space Search
-    searcher = TFIDFSearch(catalog_data)
-    results = searcher.search(text, top_n=100)
+    # 1. Run TF-IDF Vector Space Search (pre-built index)
+    results = TFIDF_SEARCHER.search(text, top_n=100)
     
-    # 2. Programmatic Rare Keyword Extraction from the Catalog
-    # Identifies rare term signatures (e.g. 'hipaa', 'svar', 'docker', 'spring') programmatically
-    rare_keywords = extract_rare_keywords(catalog_data, max_df=5)
+    # 2. Programmatic Rare Keyword Set (pre-built at startup)
+    rare_keywords = RARE_KEYWORDS
     
     # 3. Standard HR Role-to-Skills Competency Taxonomy Expansion
-    # Maps typical hiring role descriptors to their respective technical catalog skill categories.
     ROLE_TO_SKILLS_TAXONOMY = {
         "developer": {"programming", "coding", "software", "api", "database", "sql", "linux", "systems", "development"},
         "engineer": {"programming", "coding", "software", "api", "database", "sql", "linux", "systems", "development"},
@@ -199,11 +218,13 @@ def retrieve_relevant_products(messages: list, catalog_data: list) -> list:
     
     # OPQ32r (behavioral) and SHL Verify Interactive G+ (cognitive) are force-pinned
     # because they represent SHL's universal flagship products recommended for most role baselines.
+    # NOTE: this is a deliberate recall-maximizing prior; it may cost precision on roles
+    # where these baselines are not actually relevant (see approach.md section 2.4).
     core_links = {
         "https://www.shl.com/products/product-catalog/view/occupational-personality-questionnaire-opq32r/",
         "https://www.shl.com/products/product-catalog/view/shl-verify-interactive-g/"
     }
-    for item in catalog_data:
+    for item in CATALOG_DATA:
         link = item.get("link")
         if link in core_links:
             pinned_links.add(link)
@@ -218,7 +239,7 @@ def retrieve_relevant_products(messages: list, catalog_data: list) -> list:
         "svar": ["svar"]
     }
     
-    for item in catalog_data:
+    for item in CATALOG_DATA:
         name_lower = item.get("name", "").lower()
         link = item.get("link")
         
@@ -308,21 +329,9 @@ def chat_turn(messages: list) -> AgentResponseSchema:
     
     if api_key:
         genai.configure(api_key=api_key)
-    
-    # Load compressed catalog
-    catalog_path = os.path.join(os.path.dirname(__file__), "compressed_catalog.json")
-    if not os.path.exists(catalog_path):
-        catalog_path = "compressed_catalog.json"
-        
-    try:
-        with open(catalog_path, "r", encoding="utf-8") as f:
-            catalog_data = json.load(f)
-    except Exception as e:
-        print(f"Error loading compressed catalog in agent.py: {e}")
-        catalog_data = []
 
-    # Get dynamic context list
-    relevant_catalog = retrieve_relevant_products(messages, catalog_data)
+    # Get dynamic context list (uses pre-built module-level index, no rebuild here)
+    relevant_catalog = retrieve_relevant_products(messages)
 
     # Dynamic system instruction
     system_instruction = f"""You are the official Conversational SHL Assessment Recommender Agent, built by SHL Labs.
@@ -358,7 +367,10 @@ Your task is to take the recruiter/hiring manager from a vague intent to a groun
    - Only populate the `recommendations` list when you are explicitly proposing, updating, or confirming the shortlist of recommended assessments.
 
 7. **End of Conversation**:
-   - Set `end_of_conversation` to true ONLY when the user explicitly agrees, confirms, or locks in the list, or is satisfied and indicates the dialogue is complete. Otherwise false.
+   - Set `end_of_conversation` to true ONLY when the user gives an explicit final confirmation using clear closing language (e.g., "locking it in", "let's go with this", "that's final", "yes, confirmed").
+   - A question about one item in the shortlist (even a validating one like "is X the right pick?") is NOT confirmation — keep false.
+   - Pushback, reconsideration, or "do we really need X?" is NOT confirmation, even if you defend the choice and the user doesn't ultimately drop the item — keep false.
+   - If the user's message doesn't contain explicit closing language, default to false, even if the shortlist is unchanged and the tone is positive.
 
 ### Available Catalog:
 {json.dumps(relevant_catalog, indent=1)}
@@ -424,3 +436,4 @@ Your task is to take the recruiter/hiring manager from a vague intent to a groun
                     recommendations=[],
                     end_of_conversation=False
                 )
+        
